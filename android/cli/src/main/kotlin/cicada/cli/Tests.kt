@@ -15,12 +15,43 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 object Tests {
+    private fun routesConversationTurns() {
+        val conversation = ListenEngine.Conversation("en", null)
+        equal(null, conversation.destination("en", false), "wait for a partner before English playback")
+        equal("en", conversation.destination("uk", false), "Ukrainian goes to the listener")
+        conversation.partner = "uk"
+        equal("uk", conversation.destination("en", false), "English routes back")
+        equal("en", conversation.destination("de", false), "a German guest speaks to the listener")
+        equal("uk", conversation.destination("de", true), "the listener can reply in German")
+        equal(null, Translator.parseHeard("ORIGINAL: Hello there\nTRANSLATION: Привіт", "uk", null, requireLanguage = true), "missing language is not English")
+    }
+
+    private fun checksSpokenAmounts() {
+        equal("100 CAD ↔ 100 USD", cicada.AmountCheck.question("Pay 100 CAD", "Сплатіть 100 USD"), "currency changed")
+        equal(null, cicada.AmountCheck.question("Pay $100", "Сплатіть 100 CAD"), "unspecified dollar")
+        equal("$150 ↔ 1500 грн", cicada.AmountCheck.question("Pay $150.", "Сплатіть 1500 грн."), "show both readings")
+        equal(true, cicada.AmountCheck.question("Please pay $150.", "Сплатіть 1500 грн.") != null, "amount case 1")
+        equal(false, cicada.AmountCheck.question("Коштує 15,50 грн.", "It costs UAH 15.50.") != null, "amount case 2")
+        equal(false, cicada.AmountCheck.question("The invoice is CAD 1,250.50.", "Сума — 1 250,50 CAD.") != null, "amount case 3")
+        equal(true, cicada.AmountCheck.question("Сума 1 250,50 грн.", "Amount: UAH 125.05.") != null, "amount case 4")
+        equal(true, cicada.AmountCheck.question("£0.05", "0,50 GBP") != null, "amount case 5")
+        equal(false, cicada.AmountCheck.question("It is 12 dollars.", "Це 12 доларів.") != null, "amount case 6")
+        equal(false, cicada.AmountCheck.question("$50 or $60?", "65 грн?") != null, "amount case 7")
+        equal(false, cicada.AmountCheck.question("The code is 450.", "Код 540.") != null, "amount case 8")
+        equal(false, cicada.AmountCheck.question("Ten dollars.", "12 доларів.") != null, "amount case 9")
+        equal(false, cicada.AmountCheck.question("$1,250", "3 долари") != null, "amount case 10")
+        equal(false, cicada.AmountCheck.question("version 2 costs $10", "версія 2 коштує 100 грн") != null, "amount case 11")
+        equal(false, cicada.AmountCheck.question("I owe $10.", "Потрібно 12 хвилин.") != null, "amount case 12")
+    }
+
     fun run(): Int {
         val home = File(System.getProperty("java.io.tmpdir"), "cicada-tests-${ProcessHandle.current().pid()}")
         Paths.root = home
         Paths.log = File(home, "debug.log")
         home.mkdirs()
         val tests: List<Pair<String, () -> Unit>> = listOf(
+            "routesConversationTurns" to ::routesConversationTurns,
+            "checksSpokenAmounts" to ::checksSpokenAmounts,
             "sessionJsonMatchesTheMac" to ::sessionJsonMatchesTheMac,
             "todoOwnersShowInTheUiLanguage" to ::todoOwnersShowInTheUiLanguage,
             "readsAMacRecordAndWritesItBackByteForByte" to ::readsAMacRecord,

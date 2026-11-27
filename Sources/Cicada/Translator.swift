@@ -359,20 +359,20 @@ final class TranslationService {
     /// what was said and its translation in one call. nil for no speech or noise; throws when the
     /// call failed, so listening can tell a service that is down from a quiet meeting.
     func hear(wav: Data, seconds: Double, target: String, hint: String?,
-              priority: LingClient.Priority = .translate) async throws -> CloudHeard? {
+              priority: LingClient.Priority = .translate, requireLanguage: Bool = false) async throws -> CloudHeard? {
         // A custom service's speech model only transcribes: the text is translated as the Mac's own is.
         if ling.transcribes {
             // No language sent: a speech model takes it as an order, and an English line in a
             // Chinese meeting would come back as Chinese. The server tells the language itself.
             let heard = try await ling.transcribe(wav, language: nil)
-            return CloudHearing.transcript(heard.text, reported: heard.language, hint: hint, target: target, seconds: seconds)
+            return CloudHearing.transcript(heard.text, reported: heard.language, hint: hint, target: target, seconds: seconds, requireLanguage: requireLanguage)
         }
         guard ling.hearsAudio else { throw LingClient.Failure.noKey }
         let reply = try await ling.chat(content: CloudHearing.prompt(target: target, hint: hint, names: glossary()),
                                         instruction: CloudHearing.instruction(target: target), priority: priority,
                                         maxTokens: CloudHearing.tokens(seconds: seconds), timeout: 12,
                                         model: "Ming-3.0-audio-flash", audio: wav, role: "heard-them")
-        return CloudHearing.parse(reply, target: target, hint: hint, seconds: seconds)
+        return CloudHearing.parse(reply, target: target, hint: hint, seconds: seconds, requireLanguage: requireLanguage)
     }
 
     /// `ORIGINAL: …` then `TRANSLATION: …`, both non-empty, and the translation in the target's

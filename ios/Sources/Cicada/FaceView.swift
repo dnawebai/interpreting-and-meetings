@@ -32,6 +32,9 @@ struct FaceView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("结束"))
                 Menu {
+                    Button { face.setAutomatic(!face.automatic) } label: {
+                        Label("自动对话（语音发送到 AI 服务）", systemImage: face.automatic ? "checkmark.circle.fill" : "waveform")
+                    }
                     Picker(selection: Binding(get: { face.mine.locale }, set: { pick(mine: $0) })) {
                         ForEach(sourceLanguages, id: \.locale) { Text(verbatim: $0.name).tag($0.locale) }
                     } label: { Text("我说") }
@@ -42,16 +45,16 @@ struct FaceView: View {
                     HStack(spacing: 8) {
                         Text(verbatim: face.mine.name)
                         Image(systemName: "arrow.left.arrow.right").font(.footnote.weight(.semibold)).foregroundStyle(Ink.secondary)
-                        Text(verbatim: face.theirs.name)
+                        Text(verbatim: face.automatic && !face.partnerKnown ? L("自动识别") : face.theirs.name)
                     }
                     .font(.subheadline.weight(.semibold)).foregroundStyle(Ink.ink)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .background(Color.white, in: Capsule())
                 }
-                .disabled(face.phase != .idle)
+                .disabled(face.phase != .idle && !face.automatic)
                 .accessibilityLabel(Text("我说和对方说"))
                 // 不用按键, where a spacer balanced the close button.
-                Button { face.setHandsFree(!face.handsFree) } label: {
+                Button { if face.automatic { face.setAutomatic(false) } else { face.setHandsFree(!face.handsFree) } } label: {
                     Image(systemName: face.handsFree ? "hand.raised.slash.fill" : "hand.raised.slash")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(face.handsFree ? .white : Ink.ink)
@@ -77,10 +80,12 @@ struct FaceView: View {
         guard let m = FaceToFace.lang(l) else { return }
         // Picking the other side's language swaps the two.
         face.setLanguages(mine: m, theirs: m == face.theirs ? face.mine : face.theirs)
+        if face.automatic { face.setAutomatic(true) }
     }
 
     private func pick(theirs l: String) {
         guard let t = FaceToFace.lang(l) else { return }
+        if face.automatic { face.setAutomatic(false) }
         face.setLanguages(mine: t == face.mine ? face.theirs : face.mine, theirs: t)
     }
 }
@@ -90,12 +95,19 @@ private struct FaceHalf: View {
     let side: FaceToFace.Side
 
     private var lang: Lang { face.lang(side) }
+    private var waitingForSpeech: Bool {
+        switch face.phase {
+        case .idle, .hearing: return true
+        case .translating, .speaking: return false
+        }
+    }
+
     private var other: FaceToFace.Side { side == .me ? .them : .me }
 
     var body: some View {
         let (big, small, bigInk) = content
         VStack(alignment: .leading, spacing: 12) {
-            Text(verbatim: lang.name).font(.footnote).foregroundStyle(Ink.secondary)
+            Text(verbatim: face.last?.side == side ? face.last?.sourceName ?? lang.name : lang.name).font(.footnote).foregroundStyle(Ink.secondary)
             Text(verbatim: big)
                 .font(.system(size: big.count > 80 ? 20 : 24, weight: .semibold))
                 .foregroundStyle(bigInk ? Ink.ink : Ink.tertiary)
@@ -106,7 +118,13 @@ private struct FaceHalf: View {
                 Text(verbatim: small).font(.subheadline).foregroundStyle(Ink.tertiary).lineLimit(3)
             }
             Spacer(minLength: 0)
-            if face.handsFree {
+            if face.automatic {
+                Button { face.listenAutomatically(side) } label: {
+                    Label(side == .me ? L("点击用我的语言回复") : L("自动识别"), systemImage: "mic.fill")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .disabled((side == .me && !face.partnerKnown) || !waitingForSpeech)
+            } else if face.handsFree {
                 TurnButton(face: face, side: side, bundle: bundle).frame(maxWidth: .infinity)
             } else {
                 HoldButton(face: face, side: side, label: buttonLabel)
@@ -126,6 +144,12 @@ private struct FaceHalf: View {
 
     /// The big line, the grey one under it, and whether the big one is settled (ink) or not yet.
     private var content: (String, String, Bool) {
+        if let question = face.amountQuestion {
+            return (question, lang.code == "uk" ? "Яка сума правильна?" : String(localized: "金额可能有误，请再说一次", bundle: bundle), true)
+        }
+        if face.automatic, case .hearing = face.phase, let last = face.last {
+            return last.side == side ? (last.said, last.translation, true) : (last.translation, last.said, true)
+        }
         switch face.phase {
         case .hearing(let s) where s == side:
             return (face.heard.isEmpty ? String(localized: "请说…", bundle: bundle) : face.heard, "", !face.heard.isEmpty)

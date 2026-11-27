@@ -40,6 +40,10 @@ In meetings or livestreams, Cicada gives you live bilingual subtitles and writes
   <img src="docs/demo.gif" width="800" alt="A Bloomberg English livestream on YouTube with Cicada's live Chinese notes, topics, and fishbone diagram on the right and bilingual subtitles at the bottom">
 </p>
 
+On mobile, Ukrainian is available in the language picker. In face-to-face mode, if the recognized sentence and its translation each contain one clearly written currency amount and the values differ, playback pauses and asks the speaker to repeat. Android also lets you choose the other person’s language before they speak. Speech recognition and voice availability depend on the device and service.
+
+In mobile face-to-face conversations, choose your reading language. The other person can speak first. Each detected turn comes back as text and, when available, audio; speaking your reading language replies to the last partner. Tap your side to reply to that partner in a third language. On iPhone choose Auto conversation in the language menu to send turns to your configured speech service. The reusable web routing and currency comparison are in `web/interpret-turn.ts`.
+
 ## Platforms
 
 | Platform | Requirements | Notes |

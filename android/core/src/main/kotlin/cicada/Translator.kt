@@ -36,11 +36,11 @@ class Translator(private val ling: LingClient, private val transport: Transport 
     /// meeting has been in, which keeps Ming from flipping on a short or accented stretch. Null
     /// when there was no speech or the reply wasn't in the three-line form; never a guess.
     /// `seconds` is the clip's length (0: unknown): it caps the reply and catches a runaway one.
-    fun hear(clip: Clip, target: String, hint: String?, seconds: Double = 0.0): Heard? {
+    fun hear(clip: Clip, target: String, hint: String?, seconds: Double = 0.0, requireLanguage: Boolean = false): Heard? {
         val reply = ling.chat(hearPrompt(target, hint, glossary()), hearInstruction(target), Priority.Translate,
                               maxTokens = hearTokens(seconds), timeout = hearTimeout(ling), model = ling.config().hearModel,
                               audio = clip.bytes, audioType = clip.type)
-        return parseHeard(reply, target, hint, seconds)
+        return parseHeard(reply, target, hint, seconds, requireLanguage)
     }
 
     // MARK: Text
@@ -186,7 +186,7 @@ class Translator(private val ling: LingClient, private val transport: Transport 
         /// `LANG: … / ORIGINAL: … / TRANSLATION: …`. Drops replies without an original, "NONE" (music,
         /// silence), and translations not in the target's script; a dropped translation leaves the
         /// original for the text translator to try.
-        fun parseHeard(reply: String, target: String, hint: String?, seconds: Double = 0.0): Heard? {
+        fun parseHeard(reply: String, target: String, hint: String?, seconds: Double = 0.0, requireLanguage: Boolean = false): Heard? {
             var lang: String? = null; var original: String? = null; var translation: String? = null
             for (raw in reply.split('\n')) {
                 val line = raw.trim()
@@ -197,7 +197,8 @@ class Translator(private val ling: LingClient, private val transport: Transport 
             if (o.isNullOrBlank() || o.trim('.', '。', ' ').equals("NONE", ignoreCase = true)) return null
             if (o.none { it.isLetterOrDigit() }) return null
             if (isNoise(o, seconds)) { Log.d("hear: noise dropped"); return null }
-            val code = Languages.normalize(lang, hint ?: "en")
+            val code = Languages.normalize(lang, if (requireLanguage) "" else hint ?: "en")
+            if (requireLanguage && Languages.sources.none { Languages.same(it.code, code) }) return null
             var t = translation
             if (code == target) t = o
             else if (t != null) {

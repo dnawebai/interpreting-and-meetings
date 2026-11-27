@@ -54,7 +54,7 @@ enum CloudHearing {
     /// `LANG: … / ORIGINAL: … / TRANSLATION: …`. Drops replies without an original, "NONE" (music,
     /// silence) and noise; a translation not in the target's script is dropped and leaves the original
     /// for the text translator.
-    static func parse(_ reply: String, target: String, hint: String?, seconds: Double) -> CloudHeard? {
+    static func parse(_ reply: String, target: String, hint: String?, seconds: Double, requireLanguage: Bool = false) -> CloudHeard? {
         var lang: String?, original: String?, translation: String?
         func take(_ line: String, _ label: String) -> String? {
             line.lowercased().hasPrefix(label.lowercased()) ? String(line.dropFirst(label.count)).trimmingCharacters(in: .whitespaces) : nil
@@ -70,7 +70,8 @@ enum CloudHearing {
             debugLog("hear: noise dropped")
             return nil
         }
-        let code = normalize(lang, fallback: hint ?? "en")
+        let code = normalize(lang, fallback: requireLanguage ? "" : hint ?? "en")
+        if requireLanguage && !sourceLanguages.contains(where: { $0.code == code }) { return nil }
         var t = translation
         if code == target {
             t = o
@@ -84,18 +85,19 @@ enum CloudHearing {
     /// What a speech model (`/audio/transcriptions`) heard: the text, in the language the server
     /// reports ("zh", "chinese"), else the one its script shows, else the meeting's. No translation:
     /// the text translator does that, as for the Mac's own recognition. nil for nothing or noise.
-    static func transcript(_ text: String, reported: String?, hint: String?, target: String, seconds: Double) -> CloudHeard? {
+    static func transcript(_ text: String, reported: String?, hint: String?, target: String, seconds: Double, requireLanguage: Bool = false) -> CloudHeard? {
         let o = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !o.isEmpty, o.contains(where: { $0.isLetter || $0.isNumber }), !isNoise(o, seconds: seconds) else { return nil }
         let names = ["chinese": "zh-CN", "mandarin": "zh-CN", "cantonese": "zh-CN", "english": "en", "japanese": "ja",
                      "korean": "ko", "french": "fr", "german": "de", "spanish": "es", "portuguese": "pt", "russian": "ru",
-                     "italian": "it"]
+                     "italian": "it", "ukrainian": "uk"]
         var code: String
         if let r = reported?.trimmingCharacters(in: .whitespaces).lowercased(), let named = names[r] {
             code = named
         } else if let reported, !reported.isEmpty, normalize(reported, fallback: "") != "" {
             code = normalize(reported, fallback: "")
         } else {
+            if requireLanguage { return nil }
             let scalars = o.unicodeScalars
             if scalars.contains(where: { (0x3040...0x30FF).contains($0.value) }) { code = "ja" }
             else if scalars.contains(where: { (0xAC00...0xD7AF).contains($0.value) }) { code = "ko" }
@@ -197,6 +199,7 @@ struct CloudSegmenter {
         var seconds: Double { Double(samples.count) / 16000 }
     }
 
+    var turnLimit: Double = Self.maxLength
     static let frame = 480 // 30 ms
     static let threshold: Float = 0.01 // AudioRouter's gate (about -40 dBFS)
     static let pause = 0.6, maxLength = 8.0, minSpeech = 0.25, preRoll = 0.15, tail = 0.15, cutWindow = 2.0
@@ -258,7 +261,7 @@ struct CloudSegmenter {
         if isLoud { quiet = 0; loud += 1 } else { quiet += 1 }
         if Double(quiet * f) >= Self.pause * 16000 {
             close(current.count - quiet * f + Int(Self.tail * 16000), emit: emit)
-        } else if Double(current.count) >= Self.maxLength * 16000 {
+        } else if Double(current.count) >= turnLimit * 16000 {
             // The quietest frame in the last 2 s; the rest starts the next stretch.
             let from = max(1, levels.count - Int(Self.cutWindow * 16000 / Double(f)))
             var cut = from

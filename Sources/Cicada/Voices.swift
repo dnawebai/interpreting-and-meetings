@@ -39,6 +39,7 @@ enum VoiceCatalog {
     static let languages: [(key: String, title: String)] = [
         ("en", "English"), ("zh", "中文"), ("ja", "日本語"), ("ko", "한국어"),
         ("es", "Español"), ("fr", "Français"), ("de", "Deutsch"), ("pt", "Português"),
+        ("uk", "Українська"),
     ]
 
     static func key(for code: String) -> String {
@@ -117,6 +118,7 @@ enum VoiceCatalog {
         case "es": "Gracias a todos. Revisemos el calendario de lanzamiento."
         case "fr": "Merci à tous. Regardons ensemble le calendrier de lancement."
         case "de": "Danke an alle. Schauen wir uns den Zeitplan für den Start an."
+        case "uk": "Дякую. Давайте перевіримо час зустрічі."
         case "pt": "Obrigado a todos. Vamos ver o cronograma de lançamento."
         default: "Thanks everyone. Let's look at the launch timeline and decide who owns the microphone tests."
         }

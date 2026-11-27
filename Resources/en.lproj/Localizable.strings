@@ -1658,3 +1658,10 @@
 /* iOS: playback */
 "播放进度" = "Playback position";
 "本场 %lld / %lld" = "This meeting %lld / %lld";
+
+"金额可能有误，请再说一次" = "Amounts differ. Please repeat the amount.";
+"点击用我的语言回复" = "Tap to reply";
+"请先让对方说一句，或选择对方的语言" = "Let the other person speak first, or choose their language.";
+"请让对方先说一句" = "Let the other person speak first.";
+"自动对话（语音发送到 AI 服务）" = "Auto conversation (audio sent to your AI service)";
+"请先连接支持语音识别的 AI 服务" = "Connect a speech recognition service to use auto conversation.";

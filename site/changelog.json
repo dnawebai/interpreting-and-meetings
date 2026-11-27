@@ -9,6 +9,24 @@
       {
         "kind": "improved",
         "platforms": [
+          "android",
+          "ios"
+        ],
+        "title": "面对面自动识别每句的语言，向上一位说话者回复。",
+        "text": "先选自己阅读的语言。用第三种语言回复时，点自己一侧。"
+      },
+      {
+        "kind": "improved",
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "title": "面对面翻译可选乌克兰语，金额不一致时暂停朗读。",
+        "text": "当两句中都有可比较的明确金额时，数字不同会提示重说。Android 可在面对面页面指定对方语言。"
+      },
+      {
+        "kind": "improved",
+        "platforms": [
           "mac"
         ],
         "title": "Mac 版有了正式签名并通过 Apple 公证，第一次打开不会再被系统拦下。",

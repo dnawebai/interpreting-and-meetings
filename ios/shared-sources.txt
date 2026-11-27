@@ -18,6 +18,7 @@ Sources/Cicada/AudioFiles.swift
 Sources/Cicada/Translator.swift
 Sources/Cicada/Diagnostics.swift
 Sources/Cicada/RecordList.swift
+Sources/Cicada/AmountCheck.swift
 Sources/Cicada/Languages.swift
 Sources/Cicada/Recognition.swift
 Sources/Cicada/LanguageDetector.swift
