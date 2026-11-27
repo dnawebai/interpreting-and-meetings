@@ -13,7 +13,7 @@ class Segment(val index: Int, val start: Double, val samples: ShortArray) {
 /// phone's mic hears a voice across the table well under -40 dBFS. (A meeting's first stretch was once
 /// cut at 4 s to show a line sooner: Ming then finished the cut sentence by itself, and the rest
 /// came back as a second, duplicate line.)
-class Segmenter(private val gate: VoiceGate? = null) {
+class Segmenter(private val gate: VoiceGate? = null, private val turnLimit: Double? = null) {
     companion object {
         const val RATE = 16000
         private const val FRAME = 480 // 30 ms
@@ -134,7 +134,7 @@ class Segmenter(private val gate: VoiceGate? = null) {
 
         if (quietFrames * FRAME >= pause * RATE) {
             close(current.size - quietFrames * FRAME + (TAIL * RATE).toInt())
-        } else if (current.size >= maxLength * RATE) {
+        } else if (current.size >= (turnLimit ?: maxLength) * RATE) {
             // The quietest frame in the last 2 s; the rest starts the next segment.
             val from = maxOf(1, levels.size - (CUT_WINDOW * RATE / FRAME).toInt())
             var cut = from

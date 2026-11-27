@@ -129,6 +129,81 @@ class ListenEngine(
         return if (me.startsWith("en")) "zh-CN" else "en"
     }
 
+    // This object belongs to one foreground conversation. A late network reply cannot update its successor.
+    class Conversation(val home: String, partner: String?) {
+        @Volatile var partner = partner
+        @Volatile var replyNext = false
+        @Volatile var busy = false
+
+        fun destination(source: String, reply: Boolean): String? =
+            if (reply || Languages.same(source, home)) partner?.takeUnless { Languages.same(it, source) }
+            else home
+    }
+    @Volatile var conversation: Conversation? = null; private set
+
+    fun openConversation() {
+        conversation = Conversation(target, partnerLanguage?.takeUnless { Languages.same(it, target) })
+        sayProblem = null
+        amountQuestion = null
+        changed()
+    }
+
+    fun closeConversation() { conversation = null }
+
+    private fun interpretTurn(state: Conversation, seg: Segment, time: Double) {
+        val id = sessionId ?: return
+        if (state.busy || conversation !== state || muted) return
+        val reply = state.replyNext
+        state.busy = true
+        state.replyNext = false
+        amountQuestion = null
+        sayProblem = null
+        changed()
+        pool.execute {
+            fun current() = listening && sessionId == id && conversation === state
+            try {
+                val asked = if (reply) state.partner ?: state.home else state.home
+                val heard = translator.hear(encode(seg.samples), asked, null, seg.seconds, requireLanguage = true)
+                if (!current()) return@execute
+                if (heard == null) {
+                    sayProblem = Strings.L("没听清，再说一次")
+                    return@execute
+                }
+                val to = state.destination(heard.lang, reply)
+                if (to == null) {
+                    sayProblem = Strings.L("请先让对方说一句，或选择对方的语言")
+                    return@execute
+                }
+                val mine = reply || Languages.same(heard.lang, state.home)
+                if (!mine && partnerLanguage == null) state.partner = heard.lang
+                val ready = heard.translation?.takeIf { Languages.same(asked, to) && it != heard.original }
+                val text = ready ?: translator.translate(heard.original, heard.lang, to, Translator.Kind.Speak)
+                if (!current()) return@execute
+                if (text.isNullOrBlank() || text.trim().equals(heard.original.trim(), ignoreCase = true)) {
+                    sayProblem = Strings.L("这句没翻译成 · 没有说出去")
+                    return@execute
+                }
+                amountQuestion = AmountCheck.question(heard.original, text)
+                if (amountQuestion != null) {
+                    sayProblem = Strings.L("金额可能有误，请再说一次")
+                    return@execute
+                }
+                val n = synchronized(gate) { last = null; ++saidCount }
+                store.append(id, TranscriptLine(id = "m$n", t = time, speaker = if (mine) "me" else "them",
+                                               src = heard.original, dst = text, srcLang = heard.lang, dstLang = to))
+                onWords?.invoke()
+                if (current()) onSaid?.invoke(text, to)
+            } catch (e: LingException) {
+                if (current()) sayProblem = problem(e, ling.hearName).second ?: Strings.L("没听清，再说一次")
+            } catch (e: Exception) {
+                if (current()) sayProblem = Strings.L("没听清，再说一次")
+            } finally {
+                state.busy = false
+                changed()
+            }
+        }
+    }
+
     fun hold() {
         if (!canSay || holding) return
         amountQuestion = null
@@ -193,6 +268,8 @@ class ListenEngine(
         audio = queue
         // One worker owns the segmenter: audio callbacks only queue buffers.
         worker = Thread({
+            var face: Conversation? = null
+            var turns: Segmenter? = null
             var mineOpen = false
             while (true) {
                 val buf = queue.take()
@@ -201,7 +278,18 @@ class ListenEngine(
                 if (buf === RELEASE) { if (mineOpen) { mineOpen = false; finishSaying() }; continue }
                 if (mineOpen) synchronized(mine) { mine.add(buf) }
                 // Silence, not nothing, so the segmenter's clock keeps step with the meeting's.
-                segmenter.feed(if (mineOpen || muted) ShortArray(buf.size) else buf)
+                val current = conversation
+                if (current !== face) {
+                    face = current
+                    val offset = heardSeconds
+                    turns = current?.let { state ->
+                        Segmenter(VoiceGate(), turnLimit = 30.0).apply {
+                            onSegment = { seg -> interpretTurn(state, seg, offset + seg.start) }
+                        }
+                    }
+                }
+                turns?.feed(if (current?.busy == true || muted || mineOpen) ShortArray(buf.size) else buf)
+                segmenter.feed(if (current != null || mineOpen || muted) ShortArray(buf.size) else buf)
                 level = Wav.rms(buf)
                 peak = maxOf(peak * 0.995, level)
                 heardSeconds += buf.size / Segmenter.RATE.toDouble()
@@ -225,6 +313,7 @@ class ListenEngine(
         // This meeting's id now: a new one may start while this waits for Ming below.
         val id = sessionId ?: return
         listening = false
+        closeConversation()
         source?.let { it.onSamples = null; it.stop() }
         audio?.offer(END)
         worker?.join(5000)

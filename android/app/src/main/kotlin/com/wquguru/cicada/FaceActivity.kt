@@ -3,8 +3,6 @@ package com.wquguru.cicada
 import android.app.Activity
 import android.os.Bundle
 import android.view.Gravity
-import android.view.HapticFeedbackConstants
-import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -60,15 +58,19 @@ class FaceActivity : Activity() {
             isClickable = true; isFocusable = true
             elevation = ui.dp(6).toFloat()
         }
-        hold.setOnTouchListener { v, e ->
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); cicada.holdToSay(); update(); true }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); cicada.releaseToSay(); update(); true }
-                else -> true
+        hold.contentDescription = L("点击用我的语言回复")
+        hold.setOnClickListener {
+            cicada.listen.conversation?.let { if (!it.busy) it.replyNext = !it.replyNext }
+            update()
+        }
+        ui.tappable(myLabel, 8) {
+            val options = Languages.targets.map { it.code to it.name }
+            ui.choose(this, L("翻译成"), options, cicada.listen.target) { code ->
+                cicada.settings.target = code
+                cicada.saveSettings()
+                cicada.listen.openConversation()
             }
         }
-        // TalkBack's double tap is a click: once to start, again to finish.
-        hold.setOnClickListener { if (cicada.listen.holding) cicada.releaseToSay() else cicada.holdToSay(); update() }
         val close = ui.roundButton(R.drawable.i_close, L("收起")) { finish() }
         val language = ui.roundButton(R.drawable.i_people, L("对方说")) {
             val engine = cicada.listen
@@ -76,7 +78,7 @@ class FaceActivity : Activity() {
                 .filterNot { Languages.same(it.code, engine.target) }.map { it.code to it.name }
             ui.choose(this, L("对方说"), options, engine.partnerLanguage ?: "auto") { code ->
                 engine.partnerLanguage = code.takeUnless { it == "auto" }
-                update()
+                engine.openConversation()
             }
         }
         val middle = FrameLayout(this).apply {
@@ -113,31 +115,33 @@ class FaceActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!cicada.listen.listening || cicada.listen.sourceKind != "mic") { finish(); return }
+        cicada.listen.openConversation()
         unobserve = cicada.observe(::update)
         shown = null
         update()
     }
 
-    override fun onPause() { super.onPause(); unobserve?.invoke(); unobserve = null }
+    override fun onPause() { super.onPause(); unobserve?.invoke(); unobserve = null; cicada.listen.closeConversation() }
 
     private fun update() {
         val app = cicada
         val l = app.listen
         if (!l.listening) { finish(); return }
-        val their = l.theirLanguage
+        val state = l.conversation ?: return
+        val their = state.partner ?: ""
         val mineLang = app.settings.targetCode
         val line: TranscriptLine? = NotesViews.currentLines(app).lastOrNull()
-        val key = listOf(line?.id, line?.shown, line?.dst, l.holding, l.saying, app.voice.speaking, l.sayProblem, l.amountQuestion, their).joinToString("|")
+        val key = listOf(line?.id, line?.shown, line?.dst, l.holding, l.saying, app.voice.speaking, l.sayProblem, l.amountQuestion, their, state.replyNext, state.busy, mineLang).joinToString("|")
         if (key == shown) return
         shown = key
         // What each side reads, in their own language.
         val mine = line?.speaker == "me"
         val translated = line?.dst?.takeIf { it.isNotEmpty() && it != line.shown }
-        theirLabel.text = NotesViews.languageName(their)
+        theirLabel.text = (if (line != null) NotesViews.languageName(if (mine) line.dstLang else line.srcLang) else if (their.isEmpty()) L("自动识别") else NotesViews.languageName(their))
         theirText.text = when { line == null -> "…"; mine -> translated ?: "…"; else -> line.shown }
         // My line was said with 我说: the other side heard its translation (同传, as on the Mac).
-        myLabel.text = (if (mine) L("你 · 同传") else if (line == null) L("你") else L("对方")) + " · " + NotesViews.languageName(mineLang)
-        myText.text = when { line == null -> L("按住下面的按钮说话，松开后对方会听到译文"); mine -> line.shown; else -> translated ?: line.shown }
+        myLabel.text = (if (mine) L("你 · 同传") else if (line == null) L("你") else L("对方")) + " · " + NotesViews.languageName(if (mine && line != null) line.srcLang else mineLang) + " ▾"
+        myText.text = when { line == null -> L("请让对方先说一句"); mine -> line.shown; else -> translated ?: line.shown }
         myText.setTextColor(if (line == null) Palette.secondary else Palette.ink)
         val question = l.amountQuestion ?: if (!mine && line != null && translated != null)
             AmountCheck.question(line.shown, translated) else null
@@ -147,19 +151,21 @@ class FaceActivity : Activity() {
             theirLabel.text = if (their == "uk") "Яка сума правильна?" else NotesViews.languageName(their)
             myLabel.text = if (mineLang == "uk") "Яка сума правильна?" else NotesViews.languageName(mineLang)
         }
-        val live = l.holding || app.voice.speaking
+        val live = state.replyNext || app.voice.speaking
         status.text = l.sayProblem ?: when {
-            l.holding -> L("正在听你说，念的时候不收音")
-            l.saying -> L("正在翻译…")
+            state.replyNext -> L("正在听你说，念的时候不收音")
+            state.busy -> L("正在翻译…")
             app.voice.speaking -> L("正在读…")
             question != null -> L("金额可能有误，请再说一次")
             else -> L("正在听对方说")
         }
         status.setTextColor(if (l.sayProblem != null) Palette.link else Palette.secondary)
-        hint.text = if (l.holding) L("松开，说给对方") else L("松开后用 {lang} 读出来").replace("{lang}", NotesViews.languageName(their))
+        hint.text = if (state.replyNext) L("正在听你说，念的时候不收音") else L("点击用我的语言回复")
+        hold.isEnabled = !state.busy && !l.muted && state.partner != null
+        hold.alpha = if (hold.isEnabled) 1f else 0.5f
         hold.background = ui.ripple(ui.rounded(if (live) Palette.accent else Palette.ink, 52), 52, dark = true)
         holdIcon.setColorFilter(if (live) Palette.ink else android.graphics.Color.WHITE)
         // The ring says "I'm listening to you" while held.
-        hold.foreground = if (l.holding) ui.rounded(0, 52, 0x40E8552B, 10) else null
+        hold.foreground = if (state.replyNext) ui.rounded(0, 52, 0x40E8552B, 10) else null
     }
 }

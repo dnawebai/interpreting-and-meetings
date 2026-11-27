@@ -25,6 +25,7 @@ final class FaceToFace: ObservableObject {
         var side: Side
         var said: String
         var translation: String
+        var sourceName: String? = nil
     }
 
     @Published private(set) var active = false
@@ -37,6 +38,73 @@ final class FaceToFace: ObservableObject {
     @Published private(set) var problem = ""
     @Published var mine: Lang
     @Published var theirs: Lang
+
+    @Published private(set) var automatic = UserDefaults.standard.bool(forKey: "faceDetectTurns")
+    @Published private(set) var partnerKnown = false
+    private var generation = 0
+
+    func setAutomatic(_ enabled: Bool) {
+        cancelTurn()
+        voice.stop()
+        generation += 1
+        phase = .idle
+        automatic = enabled
+        partnerKnown = false
+        UserDefaults.standard.set(enabled, forKey: "faceDetectTurns")
+        if enabled { listenAutomatically(.them) }
+    }
+
+    func listenAutomatically(_ side: Side) {
+        guard active, automatic else { return }
+        cancelTurn()
+        generation += 1
+        let token = generation
+        problem = ""
+        amountQuestion = nil
+        guard ling.hearsAudio || ling.transcribes else { fail(L("请先连接支持语音识别的 AI 服务")); return }
+        phase = .hearing(side)
+        turnTask = Task {
+            guard await AVAudioApplication.requestRecordPermission() else {
+                if token == generation { fail(L("请在设置里允许知了使用麦克风")) }
+                return
+            }
+            guard !Task.isCancelled, token == generation else { return }
+            do {
+                try mic.start(auto: { [weak self] piece in
+                    Task { @MainActor in
+                        guard let self, self.generation == token, self.phase == .hearing(side) else { return }
+                        self.mic.stop()
+                        self.phase = .translating(side)
+                        self.turnTask = Task { await self.interpret(piece, side: side, token: token) }
+                    }
+                })
+            } catch { fail(L("没能开始听，再试一次")) }
+        }
+    }
+
+    private func interpret(_ piece: CloudSegmenter.Piece, side: Side, token: Int) async {
+        let asked = side == .me && partnerKnown ? theirs : mine
+        do {
+            let result = try await translator.hear(wav: CloudHearing.wav(piece.samples), seconds: piece.seconds,
+                                                   target: asked.code, hint: nil, priority: .speak, requireLanguage: true)
+            guard token == generation, active, !Task.isCancelled else { return }
+            guard let result, let from = sourceLanguages.first(where: { $0.code == result.lang }) else {
+                fail(L("没听清，再说一次")); return
+            }
+            let replying = side == .me || from.code == mine.code
+            if replying && (!partnerKnown || theirs.code == from.code) {
+                fail(L("请先让对方说一句，或选择对方的语言")); return
+            }
+            if !replying { theirs = from; partnerKnown = true }
+            let to = replying ? theirs : mine
+            let who: Side = replying ? .me : .them
+            phase = .translating(who)
+            heard = result.original
+            await turn(who, result.original, source: from, target: to, translation: asked.code == to.code ? result.translation : nil)
+        } catch {
+            if token == generation && !Task.isCancelled { fail(CloudHearing.trouble(error, service: ling.serviceName)) }
+        }
+    }
 
     private let store: SessionStore
     private let translator: TranslationService
@@ -108,12 +176,14 @@ final class FaceToFace: ObservableObject {
         problem = ""
         debugLog("face: open \(mine.locale) ⇄ \(theirs.locale)")
         // 不用按键 stays on from last time: I start.
+        if automatic { partnerKnown = false; listenAutomatically(.them); return }
         if handsFree { turnSide = .me; misses = 0; listenNext(after: 0.3) }
     }
 
     /// 结束: the record is kept when anyone was heard.
     func close() {
         guard active else { return }
+        generation += 1
         cancelTurn()
         voice.stop()
         mic.stop()
@@ -227,10 +297,13 @@ final class FaceToFace: ObservableObject {
         }
     }
 
-    private func turn(_ side: Side, _ text: String) async {
-        let from = lang(side), to = lang(side == .me ? .them : .me)
-        guard let out = await translator.translate(text, source: from.code, target: to.code, kind: .speak),
-              !out.isEmpty else {
+    private func turn(_ side: Side, _ text: String, source: Lang? = nil, target: Lang? = nil, translation: String? = nil) async {
+        let from = source ?? lang(side), to = target ?? lang(side == .me ? .them : .me)
+        let output: String?
+        if let translation, translation != text { output = translation }
+        else { output = await translator.translate(text, source: from.code, target: to.code, kind: .speak) }
+        guard !Task.isCancelled else { return }
+        guard let out = output, !out.isEmpty, out != text else {
             // Never read out untranslated text (AGENTS.md).
             guard phase == .translating(side) else { return }
             phase = .idle
@@ -242,7 +315,7 @@ final class FaceToFace: ObservableObject {
             return
         }
         guard phase == .translating(side) else { return }
-        let t = Turn(side: side, said: text, translation: out)
+        let t = Turn(side: side, said: text, translation: out, sourceName: from.name)
         if let question = AmountCheck.question(text, out) {
             amountQuestion = question
             last = nil
@@ -319,10 +392,10 @@ final class FaceToFace: ObservableObject {
     }
 
     private func listenNext(after delay: Double = 0) {
-        guard handsFree, active else { return }
+        guard !automatic, handsFree, active else { return }
         Task {
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
-            guard handsFree, active, phase == .idle else { return }
+            guard !automatic, handsFree, active, phase == .idle else { return }
             guard misses < 3 else { debugLog("face: hands-free waits for a tap"); return }
             detector.reset()
             press(turnSide)
@@ -331,7 +404,7 @@ final class FaceToFace: ObservableObject {
 
     /// The mic's level while a side is heard: its pause ends the turn.
     private func level(_ rms: Float, _ seconds: Double) {
-        guard handsFree, case .hearing(let side) = phase else { return }
+        guard !automatic, handsFree, case .hearing(let side) = phase else { return }
         if case .ended = detector.feed(rms: rms, seconds: seconds) {
             debugLog("face: hands-free heard a pause")
             release(side)
@@ -340,6 +413,10 @@ final class FaceToFace: ObservableObject {
 
     /// After a turn: read out → the other side; nothing heard or not translated → the same side again.
     private func turnOver(_ side: Side, spoken: Bool) {
+        if automatic {
+            if spoken && active && !Task.isCancelled { listenAutomatically(.them) }
+            return
+        }
         guard handsFree else { return }
         if spoken {
             misses = 0
@@ -370,6 +447,20 @@ final class FaceToFace: ObservableObject {
     }
 }
 
+/// Accessed only on FaceMic's audio queue; each recording starts with a fresh segmenter.
+private final class FaceTurnCapture: @unchecked Sendable {
+    private var segmenter = CloudSegmenter()
+    private let emit: (CloudSegmenter.Piece) -> Void
+    init(_ emit: @escaping (CloudSegmenter.Piece) -> Void) {
+        self.emit = emit
+        segmenter.turnLimit = 30
+    }
+    func append(_ buffer: AVAudioPCMBuffer) {
+        guard let samples = buffer.int16ChannelData?[0] else { return }
+        segmenter.feed(Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))), emit: emit)
+    }
+}
+
 /// The microphone for one press: `AVAudioEngine`'s input → the recognizer's format.
 final class FaceMic: @unchecked Sendable {
     private var engine = AVAudioEngine()
@@ -379,7 +470,10 @@ final class FaceMic: @unchecked Sendable {
     /// Each block's loudness (RMS) and length, on the audio thread: 不用按键 hears the pauses.
     var onLevel: ((Float, Double) -> Void)?
 
-    func start(into stream: RecognitionStream) throws {
+    func start(into stream: RecognitionStream? = nil, auto: ((CloudSegmenter.Piece) -> Void)? = nil) throws {
+        let format = stream?.format ?? AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: false)!
+        let capture = auto.map(FaceTurnCapture.init)
+
         try FaceAudio.activate()
         engine = AVAudioEngine()
         queue.sync { self.stream = stream }
@@ -392,8 +486,8 @@ final class FaceMic: @unchecked Sendable {
                 onLevel((sum / Float(buffer.frameLength)).squareRoot(), Double(buffer.frameLength) / buffer.format.sampleRate)
             }
             self.queue.async {
-                guard let s = self.stream, let c = self.convert.convert(copy, to: s.format) else { return }
-                s.append(c)
+                guard let c = self.convert.convert(copy, to: format) else { return }
+                if let capture { capture.append(c) } else { self.stream?.append(c) }
             }
         }
         engine.prepare()

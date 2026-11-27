@@ -15,6 +15,17 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 object Tests {
+    private fun routesConversationTurns() {
+        val conversation = ListenEngine.Conversation("en", null)
+        equal(null, conversation.destination("en", false), "wait for a partner before English playback")
+        equal("en", conversation.destination("uk", false), "Ukrainian goes to the listener")
+        conversation.partner = "uk"
+        equal("uk", conversation.destination("en", false), "English routes back")
+        equal("en", conversation.destination("de", false), "a German guest speaks to the listener")
+        equal("uk", conversation.destination("de", true), "the listener can reply in German")
+        equal(null, Translator.parseHeard("ORIGINAL: Hello there\nTRANSLATION: Привіт", "uk", null, requireLanguage = true), "missing language is not English")
+    }
+
     private fun checksSpokenAmounts() {
         equal("100 CAD ↔ 100 USD", cicada.AmountCheck.question("Pay 100 CAD", "Сплатіть 100 USD"), "currency changed")
         equal(null, cicada.AmountCheck.question("Pay $100", "Сплатіть 100 CAD"), "unspecified dollar")
@@ -39,6 +50,7 @@ object Tests {
         Paths.log = File(home, "debug.log")
         home.mkdirs()
         val tests: List<Pair<String, () -> Unit>> = listOf(
+            "routesConversationTurns" to ::routesConversationTurns,
             "checksSpokenAmounts" to ::checksSpokenAmounts,
             "sessionJsonMatchesTheMac" to ::sessionJsonMatchesTheMac,
             "todoOwnersShowInTheUiLanguage" to ::todoOwnersShowInTheUiLanguage,
