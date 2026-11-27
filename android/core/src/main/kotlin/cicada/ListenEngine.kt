@@ -109,6 +109,7 @@ class ListenEngine(
     /// segmenter gets silence instead.
     @Volatile var muted = false
     /// Why the last press said nothing ("没听清，再说一次"); cleared by the next press.
+    @Volatile var amountQuestion: String? = null; private set
     @Volatile var sayProblem: String? = null; private set
     private val mine = ArrayList<ShortArray>()
     private var holdStart = 0.0
@@ -118,8 +119,11 @@ class ListenEngine(
 
     /// Who I'm talking to speaks the meeting's language; before they have said anything (or when
     /// it is mine), English, or Chinese for an English speaker (the Mac always falls back to English).
+    // An explicit room partner applies only to this microphone session.
+    @Volatile var partnerLanguage: String? = null
     val theirLanguage: String get() {
         val me = target
+        partnerLanguage?.takeUnless { Languages.same(it, me) }?.let { return it }
         val heard = spoken
         if (heard != null && !Languages.same(heard, me)) return heard
         return if (me.startsWith("en")) "zh-CN" else "en"
@@ -127,6 +131,7 @@ class ListenEngine(
 
     fun hold() {
         if (!canSay || holding) return
+        amountQuestion = null
         holding = true
         sayProblem = null
         audio?.offer(HOLD)
@@ -169,6 +174,8 @@ class ListenEngine(
         val session = store.begin()
         sessionId = session.id
         sourceKind = kind
+        partnerLanguage = null
+        amountQuestion = null
         synchronized(gate) {
             done.clear(); segments.clear(); inFlight.clear(); voiceprints.clear()
             nextToDeliver = 1; lineCount = 0; last = null; lastEnd = 0.0
@@ -270,6 +277,13 @@ class ListenEngine(
             // As on the Mac: a sentence that didn't translate is neither sent nor recorded. One
             // already in their language was heard as it is, so it is kept.
             if (text == null && !sameLanguage) { sayProblem = Strings.L("这句没翻译成 · 没有说出去"); return }
+            if (!listening || sessionId != id) return
+            val question = text?.let { AmountCheck.question(heard.original, it) }
+            if (question != null) {
+                amountQuestion = question
+                sayProblem = Strings.L("金额可能有误，请再说一次")
+                return
+            }
             val n = synchronized(gate) { ++saidCount }
             val line = TranscriptLine(id = "m$n", t = t, speaker = "me", src = heard.original, dst = dst,
                                       srcLang = heard.lang, dstLang = their)
@@ -394,6 +408,10 @@ class ListenEngine(
 
     private fun record(seg: Segment, heard: Heard, voice: Int?) {
         val id = sessionId ?: return
+        if (amountQuestion != null) {
+            amountQuestion = null
+            sayProblem = null
+        }
         val target = settings.targetFor(heard.lang)
         // The meeting's language moves only after two segments agree, so one misheard stretch
         // doesn't flip the hint (the Mac waits for confidence the same way).

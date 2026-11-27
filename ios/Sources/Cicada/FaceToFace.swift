@@ -33,6 +33,7 @@ final class FaceToFace: ObservableObject {
     @Published private(set) var draftTranslation = ""
     @Published private(set) var last: Turn?
     /// Why the last turn wasn't read out, in the UI's language; cleared by the next press.
+    @Published private(set) var amountQuestion: String?
     @Published private(set) var problem = ""
     @Published var mine: Lang
     @Published var theirs: Lang
@@ -103,6 +104,7 @@ final class FaceToFace: ObservableObject {
         active = true
         phase = .idle
         last = nil
+        amountQuestion = nil
         problem = ""
         debugLog("face: open \(mine.locale) ⇄ \(theirs.locale)")
         // 不用按键 stays on from last time: I start.
@@ -136,6 +138,7 @@ final class FaceToFace: ObservableObject {
         heard = ""
         draftTranslation = ""
         problem = ""
+        amountQuestion = nil
         finals = []
         phase = .hearing(side)
         let lang = lang(side)
@@ -240,6 +243,13 @@ final class FaceToFace: ObservableObject {
         }
         guard phase == .translating(side) else { return }
         let t = Turn(side: side, said: text, translation: out)
+        if let question = AmountCheck.question(text, out) {
+            amountQuestion = question
+            last = nil
+            draftTranslation = ""
+            fail(L("金额可能有误，请再说一次"))
+            return
+        }
         last = t
         heard = ""
         draftTranslation = ""

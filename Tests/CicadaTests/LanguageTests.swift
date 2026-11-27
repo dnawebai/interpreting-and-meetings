@@ -3,6 +3,25 @@ import Testing
 
 @Suite struct LanguageTests {
     @Test(arguments: [
+        ("Pay 100 CAD", "Сплатіть 100 USD", true),
+        ("Pay $100", "Сплатіть 100 CAD", false),
+        ("Please pay $150.", "Сплатіть 1500 грн.", true),
+        ("Коштує 15,50 грн.", "It costs UAH 15.50.", false),
+        ("The invoice is CAD 1,250.50.", "Сума — 1 250,50 CAD.", false),
+        ("Сума 1 250,50 грн.", "Amount: UAH 125.05.", true),
+        ("£0.05", "0,50 GBP", true),
+        ("It is 12 dollars.", "Це 12 доларів.", false),
+        ("$50 or $60?", "65 грн?", false),
+        ("The code is 450.", "Код 540.", false),
+        ("Ten dollars.", "12 доларів.", false),
+        ("$1,250", "3 долари", false),
+        ("version 2 costs $10", "версія 2 коштує 100 грн", false),
+        ("I owe $10.", "Потрібно 12 хвилин.", false)
+    ]) func checksSpokenAmounts(original: String, translation: String, changed: Bool) {
+        #expect((AmountCheck.question(original, translation) != nil) == changed)
+    }
+
+    @Test(arguments: [
         ("zh-Hans-CN", "zh-CN"), ("zh-Hans-CA", "zh-CN"), ("zh-Hant-TW", "zh-TW"),
         ("zh-TW", "zh-TW"), ("zh-HK", "zh-TW"), ("zh-CN", "zh-CN"),
         ("en-CA", "en"), ("ja-JP", "ja"), ("pt-BR", "pt"),

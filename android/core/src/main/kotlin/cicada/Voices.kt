@@ -17,7 +17,7 @@ object VoiceCatalog {
 
     /// The picker's languages (key, title), as on the Mac. The key is the code without region.
     val languages = listOf("en" to "English", "zh" to "中文", "ja" to "日本語", "ko" to "한국어",
-                           "es" to "Español", "fr" to "Français", "de" to "Deutsch", "pt" to "Português")
+                           "es" to "Español", "fr" to "Français", "de" to "Deutsch", "pt" to "Português", "uk" to "Українська")
 
     fun key(code: String): String = code.substringBefore('-').ifEmpty { "en" }
 
@@ -82,6 +82,7 @@ object VoiceCatalog {
         "es" -> "Gracias a todos. Revisemos el calendario de lanzamiento."
         "fr" -> "Merci à tous. Regardons ensemble le calendrier de lancement."
         "de" -> "Danke an alle. Schauen wir uns den Zeitplan für den Start an."
+        "uk" -> "Дякую. Давайте перевіримо час зустрічі."
         "pt" -> "Obrigado a todos. Vamos ver o cronograma de lançamento."
         else -> "Thanks everyone. Let's look at the launch timeline and decide who owns the microphone tests."
     }

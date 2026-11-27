@@ -20,6 +20,7 @@ let sourceLanguages: [Lang] = [
     .init(name: "Français", locale: "fr-FR", code: "fr"),
     .init(name: "Deutsch", locale: "de-DE", code: "de"),
     .init(name: "Português", locale: "pt-BR", code: "pt"),
+    .init(name: "Українська", locale: "uk-UA", code: "uk"),
 ]
 
 let targetLanguages: [Lang] = [
@@ -32,6 +33,7 @@ let targetLanguages: [Lang] = [
     .init(name: "Français", locale: "fr", code: "fr"),
     .init(name: "Deutsch", locale: "de", code: "de"),
     .init(name: "Português", locale: "pt", code: "pt"),
+    .init(name: "Українська", locale: "uk", code: "uk"),
 ]
 
 /// Maps a system language identifier ("zh-Hans-CA", "en-CA", "zh-TW") to a translation code.

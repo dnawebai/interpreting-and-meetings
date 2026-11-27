@@ -10,6 +10,8 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import cicada.AmountCheck
+import cicada.Languages
 import cicada.Strings.L
 import cicada.TranscriptLine
 
@@ -68,8 +70,20 @@ class FaceActivity : Activity() {
         // TalkBack's double tap is a click: once to start, again to finish.
         hold.setOnClickListener { if (cicada.listen.holding) cicada.releaseToSay() else cicada.holdToSay(); update() }
         val close = ui.roundButton(R.drawable.i_close, L("收起")) { finish() }
+        val language = ui.roundButton(R.drawable.i_people, L("对方说")) {
+            val engine = cicada.listen
+            val options = listOf("auto" to L("自动识别")) + Languages.targets
+                .filterNot { Languages.same(it.code, engine.target) }.map { it.code to it.name }
+            ui.choose(this, L("对方说"), options, engine.partnerLanguage ?: "auto") { code ->
+                engine.partnerLanguage = code.takeUnless { it == "auto" }
+                update()
+            }
+        }
         val middle = FrameLayout(this).apply {
-            addView(status, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER))
+            addView(status, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply {
+                marginStart = ui.dp(50); marginEnd = ui.dp(50)
+            })
+            addView(language, FrameLayout.LayoutParams(ui.dp(48), ui.dp(48), Gravity.START or Gravity.CENTER_VERTICAL))
             addView(close, FrameLayout.LayoutParams(ui.dp(48), ui.dp(48), Gravity.END or Gravity.CENTER_VERTICAL))
         }
         val root = LinearLayout(this).apply {
@@ -113,7 +127,7 @@ class FaceActivity : Activity() {
         val their = l.theirLanguage
         val mineLang = app.settings.targetCode
         val line: TranscriptLine? = NotesViews.currentLines(app).lastOrNull()
-        val key = listOf(line?.id, line?.shown, line?.dst, l.holding, l.saying, app.voice.speaking, l.sayProblem, their).joinToString("|")
+        val key = listOf(line?.id, line?.shown, line?.dst, l.holding, l.saying, app.voice.speaking, l.sayProblem, l.amountQuestion, their).joinToString("|")
         if (key == shown) return
         shown = key
         // What each side reads, in their own language.
@@ -125,11 +139,20 @@ class FaceActivity : Activity() {
         myLabel.text = (if (mine) L("你 · 同传") else if (line == null) L("你") else L("对方")) + " · " + NotesViews.languageName(mineLang)
         myText.text = when { line == null -> L("按住下面的按钮说话，松开后对方会听到译文"); mine -> line.shown; else -> translated ?: line.shown }
         myText.setTextColor(if (line == null) Palette.secondary else Palette.ink)
+        val question = l.amountQuestion ?: if (!mine && line != null && translated != null)
+            AmountCheck.question(line.shown, translated) else null
+        if (question != null) {
+            theirText.text = question
+            myText.text = question
+            theirLabel.text = if (their == "uk") "Яка сума правильна?" else NotesViews.languageName(their)
+            myLabel.text = if (mineLang == "uk") "Яка сума правильна?" else NotesViews.languageName(mineLang)
+        }
         val live = l.holding || app.voice.speaking
         status.text = l.sayProblem ?: when {
             l.holding -> L("正在听你说，念的时候不收音")
             l.saying -> L("正在翻译…")
             app.voice.speaking -> L("正在读…")
+            question != null -> L("金额可能有误，请再说一次")
             else -> L("正在听对方说")
         }
         status.setTextColor(if (l.sayProblem != null) Palette.link else Palette.secondary)

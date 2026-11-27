@@ -126,6 +126,9 @@ private struct FaceHalf: View {
 
     /// The big line, the grey one under it, and whether the big one is settled (ink) or not yet.
     private var content: (String, String, Bool) {
+        if let question = face.amountQuestion {
+            return (question, lang.code == "uk" ? "Яка сума правильна?" : String(localized: "金额可能有误，请再说一次", bundle: bundle), true)
+        }
         switch face.phase {
         case .hearing(let s) where s == side:
             return (face.heard.isEmpty ? String(localized: "请说…", bundle: bundle) : face.heard, "", !face.heard.isEmpty)
