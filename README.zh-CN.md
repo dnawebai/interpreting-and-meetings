@@ -36,6 +36,8 @@
 
 **能在哪里用**：电脑能出声的地方都行——腾讯会议、飞书、钉钉、企业微信、Zoom、Teams、Google Meet、Webex、Discord、Telegram 语音，还有 X Spaces、YouTube、Twitch、B 站直播、播客和网页。手机上系统不让录通话和会议 app 的声音，开外放用“面对面”就行。
 
+移动网页版可通过 `web/interpret-agents.ts` 使用经确认的术语记忆、双语核对和带原文引证的术语研究。账户存储、模型和资料检索由宿主应用提供。
+
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="YouTube 播着 Bloomberg 英文直播，右边是知了实时整理的中文纪要、议题与鱼骨图，底部是双语字幕">
 </p>

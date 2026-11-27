@@ -36,6 +36,8 @@ In meetings or livestreams, Cicada gives you live bilingual subtitles and writes
 
 **Where it works**: Anything that plays sound on your computer—Tencent Meeting, Feishu, DingTalk, WeCom, Zoom, Teams, Google Meet, Webex, Discord, and Telegram voice chats, plus X Spaces, YouTube, Twitch, Bilibili Live, podcasts, and web pages. On phones, the system blocks recording audio from call and meeting apps—put it on speaker and use In person instead.
 
+The mobile web adapter in `web/interpret-agents.ts` exposes vocabulary recall, correction proposals, bilingual review, and source-backed terminology research. The host supplies its account store, model, and document retrieval. Run `node --test web/interpret-agents.test.mjs` with Node 24.
+
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="A Bloomberg English livestream on YouTube with Cicada's live Chinese notes, topics, and fishbone diagram on the right and bilingual subtitles at the bottom">
 </p>

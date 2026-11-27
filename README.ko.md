@@ -36,6 +36,8 @@
 
 **사용 가능한 곳**: 컴퓨터에서 소리가 나는 모든 곳에서 쓸 수 있습니다. Tencent Meeting, Feishu, DingTalk, WeCom, Zoom, Teams, Google Meet, Webex, Discord, Telegram 음성 채팅은 물론 X Spaces, YouTube, Twitch, Bilibili 라이브, 팟캐스트 및 웹페이지도 지원합니다. 스마트폰에서는 시스템에서 통화 및 회의 앱 소리 녹음을 허용하지 않으므로, 스피커폰을 켜고 '대면' 모드를 사용하면 됩니다.
 
+모바일 웹 어댑터 `web/interpret-agents.ts`는 승인한 용어 기억, 번역 검토, 출처를 인용하는 용어 조사를 제공합니다. 계정 저장소, 모델, 문서 검색은 호스트가 연결합니다.
+
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="YouTube에서 재생 중인 Bloomberg 영어 라이브 방송과 오른쪽의 Cicada가 실시간으로 정리한 중국어 회의록, 안건, 피시본 다이어그램, 하단의 이중 언어 자막">
 </p>
