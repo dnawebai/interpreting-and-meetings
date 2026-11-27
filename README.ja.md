@@ -36,6 +36,8 @@
 
 **使える場所**：パソコンから音が出るものなら何でも使えます。Tencent Meeting、Feishu、DingTalk、WeCom、Zoom、Teams、Google Meet、Webex、Discord、Telegram の音声通話、X スペース、YouTube、Twitch、Bilibili Live、ポッドキャスト、ブラウザなどに対応しています。スマートフォンでは、OS の制限により通話や会議アプリの音声を録音できないため、スピーカーフォンにして「対面」モードをお使いください。
 
+モバイル Web 向けの `web/interpret-agents.ts` は承認済みの用語、訳の確認、原文を引用する用語調査を扱います。アカウント、モデル、資料の取得はホスト側で接続します。
+
 <p align="center">
   <img src="docs/demo.gif" width="800" alt="YouTube の Bloomberg の英語のライブ配信。右側に Cicada のリアルタイムの中国語のメモ、トピック、フィッシュボーン図、下部に二か国語の字幕が表示されています">
 </p>

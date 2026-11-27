@@ -7,6 +7,14 @@
     "image": null,
     "items": [
       {
+        "kind": "new",
+        "platforms": [
+          "web"
+        ],
+        "title": "移动网页可接入个人术语记忆与双语核对。",
+        "text": "研究结果附上匹配的原文，术语修正由用户确认后保存。"
+      },
+      {
         "kind": "improved",
         "platforms": [
           "android",
